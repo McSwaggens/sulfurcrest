@@ -22,7 +22,7 @@ struct TranscriptionView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 14)
+        .padding(.vertical, 18)
         .frame(width: Self.width, alignment: .topLeading)
         .background(
             GeometryReader { geo in
@@ -37,15 +37,39 @@ struct TranscriptionView: View {
     @ViewBuilder private var content: some View {
         if let message = model.statusMessage {
             Text(message).foregroundStyle(.secondary)
-        } else if model.words.isEmpty {
-            Text(model.isListening ? "Listening…" : "").foregroundStyle(.secondary)
+        } else if model.words.isEmpty && !model.isListening {
+            Text("")
         } else {
+            // Words flow and wrap; the input meter rides along as the trailing
+            // element, acting as a live "cursor" right after the newest word.
             FlowLayout(spacing: 6, lineSpacing: 4) {
                 ForEach(model.words) { word in
                     WordView(text: word.text)
                 }
+                if model.isListening {
+                    InputMeterView(level: model.inputLevel)
+                }
             }
         }
+    }
+}
+
+/// A small vertical-bars audio meter that reacts to the live mic input level.
+private struct InputMeterView: View {
+    let level: Float                                     // 0...1
+    private let weights: [CGFloat] = [0.55, 1.0, 0.7]   // center bar tallest
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(weights.indices, id: \.self) { i in
+                Capsule()
+                    .fill(Color.primary.opacity(0.9))
+                    .frame(width: 3, height: 4 + 14 * CGFloat(level) * weights[i])
+            }
+        }
+        // Fixed box so a changing level only animates the bars, never re-flows text.
+        .frame(width: 13, height: 20, alignment: .center)
+        .animation(.easeOut(duration: 0.12), value: level)
     }
 }
 

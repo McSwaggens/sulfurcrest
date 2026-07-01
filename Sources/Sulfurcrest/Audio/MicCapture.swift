@@ -20,14 +20,18 @@ final class MicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, 
 
     // Owned by `queue`.
     private var continuation: AsyncStream<AudioChunk>.Continuation?
+    private var levelContinuation: AsyncStream<Float>.Continuation?
     private var outputConfigured = false
 
     /// Starts capture on the private queue; resolves once the session is running.
-    /// Safe to call from the main actor.
-    func start(deviceUID: String?, feeding continuation: AsyncStream<AudioChunk>.Continuation) async {
+    /// Safe to call from the main actor. `levelContinuation` receives a 0...1 live
+    /// input level per delivered buffer, driving the HUD meter.
+    func start(deviceUID: String?, feeding continuation: AsyncStream<AudioChunk>.Continuation,
+               level levelContinuation: AsyncStream<Float>.Continuation) async {
         await withCheckedContinuation { (resume: CheckedContinuation<Void, Never>) in
             queue.async { [weak self] in
-                self?.configureAndStart(deviceUID: deviceUID, feeding: continuation)
+                self?.configureAndStart(
+                    deviceUID: deviceUID, feeding: continuation, level: levelContinuation)
                 resume.resume()
             }
         }
@@ -37,6 +41,7 @@ final class MicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, 
         queue.async { [weak self] in
             guard let self else { return }
             self.continuation = nil
+            self.levelContinuation = nil
             if self.session.isRunning { self.session.stopRunning() }
         }
     }
@@ -44,9 +49,11 @@ final class MicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, 
     // MARK: - Queue-isolated setup
 
     private func configureAndStart(
-        deviceUID: String?, feeding continuation: AsyncStream<AudioChunk>.Continuation
+        deviceUID: String?, feeding continuation: AsyncStream<AudioChunk>.Continuation,
+        level levelContinuation: AsyncStream<Float>.Continuation
     ) {
         self.continuation = continuation
+        self.levelContinuation = levelContinuation
 
         let device = deviceUID.flatMap { AVCaptureDevice(uniqueID: $0) }
             ?? AVCaptureDevice.default(for: .audio)
@@ -132,6 +139,8 @@ final class MicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, 
                 mono[frame] = sum * scale
             }
         }
-        continuation.yield(AudioChunk(samples: mono, sampleRate: sampleRate))
+        let chunk = AudioChunk(samples: mono, sampleRate: sampleRate)
+        continuation.yield(chunk)
+        levelContinuation?.yield(chunk.level)
     }
 }

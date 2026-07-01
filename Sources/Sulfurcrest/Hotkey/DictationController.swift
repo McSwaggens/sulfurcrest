@@ -35,6 +35,9 @@ final class DictationController {
     private let commandContinuation: AsyncStream<Command>.Continuation
     private var sessionActive = false
 
+    // Live mic input level → HUD meter.
+    private var levelContinuation: AsyncStream<Float>.Continuation?
+
     private var started = false
 
     init() {
@@ -67,6 +70,17 @@ final class DictationController {
         Task { [weak self] in
             for await display in ASRService.shared.displayStream {
                 self?.hud.model.setTranscript(display.combined)
+            }
+        }
+
+        // Live mic level → HUD meter, with fast attack / slow decay smoothing.
+        let (levelStream, levelCont) = AsyncStream<Float>.makeStream()
+        levelContinuation = levelCont
+        Task { [weak self] in
+            var smoothed: Float = 0
+            for await level in levelStream {
+                smoothed = max(level, smoothed * 0.8)
+                self?.hud.model.inputLevel = smoothed
             }
         }
     }
@@ -130,7 +144,8 @@ final class DictationController {
                 let continuation = try await asr.beginSession(
                     previewInterval: Settings.shared.previewInterval)
                 await mic.start(
-                    deviceUID: Settings.shared.inputDeviceUID, feeding: continuation)
+                    deviceUID: Settings.shared.inputDeviceUID, feeding: continuation,
+                    level: levelContinuation!)
             } catch {
                 sessionActive = false
                 await asr.cancelSession()

@@ -14,6 +14,17 @@ struct AudioChunk: Sendable {
         self.sampleRate = sampleRate
     }
 
+    /// A 0...1 input level (dB-scaled RMS) for the live meter. Nonisolated and
+    /// cheap, so it can be computed from the realtime tap block.
+    var level: Float {
+        guard !samples.isEmpty else { return 0 }
+        var sum: Float = 0
+        for s in samples { sum += s * s }
+        let rms = (sum / Float(samples.count)).squareRoot()
+        let db = 20 * log10(max(rms, 1e-7))
+        return max(0, min(1, (db + 60) / 55))   // ~-60dB floor .. -5dB ceil; tunable
+    }
+
     /// Extracts mono Float32 samples from a tap buffer. Runs on the audio thread.
     init?(buffer: AVAudioPCMBuffer, sampleRate: Double) {
         guard let channelData = buffer.floatChannelData else { return nil }

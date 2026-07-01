@@ -17,6 +17,8 @@ final class TranscriptModel: ObservableObject {
     @Published private(set) var words: [DisplayWord] = []
     @Published var isListening = false
     @Published var statusMessage: String?
+    /// Live microphone input level (0...1) driving the meter "cursor".
+    @Published var inputLevel: Float = 0
 
     private var target: [String] = []
     private var revealTask: Task<Void, Never>?
@@ -57,5 +59,6 @@ final class TranscriptModel: ObservableObject {
         words = []
         target = []
         statusMessage = nil
+        inputLevel = 0
     }
 }

@@ -9,12 +9,12 @@ final class GlassHUDPanel: NSPanel {
     let model = TranscriptModel()
     private var host: NSHostingView<TranscriptionView>!
 
-    private let minHeight: CGFloat = 52
+    private let minHeight: CGFloat = 64
     private let maxHeight: CGFloat = 360
 
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: TranscriptionView.width, height: 56),
+            contentRect: NSRect(x: 0, y: 0, width: TranscriptionView.width, height: 64),
             styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false)
@@ -33,8 +33,22 @@ final class GlassHUDPanel: NSPanel {
         blur.blendingMode = .behindWindow
         blur.state = .active
         blur.wantsLayer = true
-        blur.layer?.cornerRadius = 16
+        blur.layer?.cornerRadius = 26
         blur.layer?.masksToBounds = true
+
+        // Darkening tint over the blur (clipped to the rounded shape by the blur's
+        // masksToBounds), giving the HUD a deeper, more solid background.
+        let tint = NSView()
+        tint.wantsLayer = true
+        tint.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.3).cgColor
+        tint.translatesAutoresizingMaskIntoConstraints = false
+        blur.addSubview(tint)
+        NSLayoutConstraint.activate([
+            tint.leadingAnchor.constraint(equalTo: blur.leadingAnchor),
+            tint.trailingAnchor.constraint(equalTo: blur.trailingAnchor),
+            tint.topAnchor.constraint(equalTo: blur.topAnchor),
+            tint.bottomAnchor.constraint(equalTo: blur.bottomAnchor),
+        ])
 
         host = NSHostingView(
             rootView: TranscriptionView(model: model, onHeightChange: { [weak self] height in
