@@ -129,7 +129,8 @@ final class DictationController {
             do {
                 let continuation = try await asr.beginSession(
                     previewInterval: Settings.shared.previewInterval)
-                try mic.start(feeding: continuation)
+                await mic.start(
+                    deviceUID: Settings.shared.inputDeviceUID, feeding: continuation)
             } catch {
                 sessionActive = false
                 await asr.cancelSession()

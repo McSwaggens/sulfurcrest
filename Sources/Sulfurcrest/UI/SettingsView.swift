@@ -4,9 +4,31 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject private var settings = Settings.shared
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var inputDevices = AudioDevices.inputs()
+
+    /// Tag for the "System Default" row (empty == nil UID).
+    private static let systemDefaultTag = ""
 
     var body: some View {
         Form {
+            Section("Microphone") {
+                Picker("Input device", selection: Binding(
+                    get: { settings.inputDeviceUID ?? Self.systemDefaultTag },
+                    set: { settings.inputDeviceUID = $0.isEmpty ? nil : $0 })
+                ) {
+                    Text("System Default").tag(Self.systemDefaultTag)
+                    ForEach(inputDevices) { device in
+                        Text(device.name).tag(device.uid)
+                    }
+                }
+                Text("Which mic dictation records from. AirPods and other Bluetooth "
+                    + "headsets work, but macOS drops them to call quality while "
+                    + "recording — pick your built-in mic to keep their audio crisp "
+                    + "and improve accuracy.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Live preview") {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -50,6 +72,7 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
+        .onAppear { inputDevices = AudioDevices.inputs() }
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

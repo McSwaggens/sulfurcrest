@@ -25,12 +25,20 @@ final class Settings: ObservableObject {
         didSet { defaults.set(hasCompletedOnboarding, forKey: Keys.hasCompletedOnboarding) }
     }
 
+    /// UID of the input device to capture from, or nil for the system default.
+    /// Pinning to the built-in mic avoids the Bluetooth A2DP→HFP switch (AirPods
+    /// dropping to call quality) while dictating.
+    @Published var inputDeviceUID: String? {
+        didSet { defaults.set(inputDeviceUID, forKey: Keys.inputDeviceUID) }
+    }
+
     private let defaults = UserDefaults.standard
 
     private enum Keys {
         static let previewInterval = "previewInterval"
         static let revealDelayMs = "revealDelayMs"
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
+        static let inputDeviceUID = "inputDeviceUID"
     }
 
     private init() {
@@ -39,5 +47,6 @@ final class Settings: ObservableObject {
         revealDelayMs = defaults.object(forKey: Keys.revealDelayMs) as? Double
             ?? Self.defaultRevealDelayMs
         hasCompletedOnboarding = defaults.bool(forKey: Keys.hasCompletedOnboarding)
+        inputDeviceUID = defaults.string(forKey: Keys.inputDeviceUID)
     }
 }
