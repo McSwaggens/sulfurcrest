@@ -22,6 +22,16 @@ final class MicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, 
     private var continuation: AsyncStream<AudioChunk>.Continuation?
     private var outputConfigured = false
 
+    /// App-lifetime stream of per-chunk RMS amplitude, published only while a
+    /// capture session is running. Used for silence detection (auto-stop).
+    let levels: AsyncStream<Float>
+    private let levelContinuation: AsyncStream<Float>.Continuation
+
+    override init() {
+        (levels, levelContinuation) = AsyncStream.makeStream()
+        super.init()
+    }
+
     /// Starts capture on the private queue; resolves once the session is running.
     /// Safe to call from the main actor.
     func start(deviceUID: String?, feeding continuation: AsyncStream<AudioChunk>.Continuation) async {
@@ -133,5 +143,10 @@ final class MicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, 
             }
         }
         continuation.yield(AudioChunk(samples: mono, sampleRate: sampleRate))
+
+        // Per-chunk RMS amplitude, for silence detection (auto-stop).
+        var sumSquares: Float = 0
+        for sample in mono { sumSquares += sample * sample }
+        levelContinuation.yield((sumSquares / Float(frames)).squareRoot())
     }
 }

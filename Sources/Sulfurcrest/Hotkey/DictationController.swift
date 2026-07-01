@@ -29,6 +29,11 @@ final class DictationController {
     private var flashWork: DispatchWorkItem?
     private let holdThreshold: TimeInterval = 0.35
 
+    // MARK: Auto-stop on silence (hands-free sessions only)
+    private static let silenceRMSThreshold: Float = 0.015   // heuristic; tune if needed
+    private var sawSpeech = false
+    private var lastLoudAt: Date?
+
     // MARK: Execution layer (serial)
     private enum Command { case start, stop, cancel }
     private let commands: AsyncStream<Command>
@@ -68,6 +73,12 @@ final class DictationController {
             for await display in ASRService.shared.displayStream {
                 self?.hud.model.setTranscript(display.combined)
             }
+        }
+
+        // Mic amplitude → silence tracker (auto-stop).
+        let levels = mic.levels
+        Task { [weak self] in
+            for await level in levels { self?.handleLevel(level) }
         }
     }
 
@@ -124,6 +135,8 @@ final class DictationController {
         case .start:
             guard !sessionActive else { return }
             sessionActive = true
+            sawSpeech = false
+            lastLoudAt = nil
             flashWork?.cancel()
             hud.present()
             do {
@@ -152,6 +165,29 @@ final class DictationController {
             mic.stop()
             hud.dismiss()
             await asr.cancelSession()
+        }
+    }
+
+    /// Auto-stop a hands-free session once the mic stays silent long enough.
+    /// Runs on the main actor, once per captured audio chunk (~23×/sec).
+    private func handleLevel(_ rms: Float) {
+        // Only tap-latched hands-free sessions auto-stop; hold-to-talk is
+        // release-to-stop. Gate on the live setting.
+        guard sessionActive, toggledOn, Settings.shared.autoStopEnabled else {
+            sawSpeech = false
+            return
+        }
+        if rms >= Self.silenceRMSThreshold {
+            sawSpeech = true
+            lastLoudAt = Date()
+        } else if sawSpeech, let last = lastLoudAt,
+                  Date().timeIntervalSince(last) >= Settings.shared.autoStopSilence {
+            // Mirror commandKeyUp's stop: clear intent flags, then reuse the
+            // existing .stop path so the transcript is pasted.
+            active = false
+            toggledOn = false
+            sawSpeech = false
+            commandContinuation.yield(.stop)
         }
     }
 
