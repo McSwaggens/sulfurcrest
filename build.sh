@@ -12,12 +12,14 @@
 #                  Falls back to ad-hoc "-" if not found in the keychain.
 #                  A stable identity keeps Accessibility/Mic grants across rebuilds.
 #   HARDENED=1     Sign with the hardened runtime (needed for notarization).
+#   BUILD_CONFIG   swift build configuration: release (default) or debug.
+#                  Debug keeps an unoptimized binary for clearer crash reports.
 #   INSTALL_DIR    Install location (default /Applications).
 #
 set -euo pipefail
 
 APP_NAME="Sulfurcrest"
-BUILD_CONFIG="release"
+BUILD_CONFIG="${BUILD_CONFIG:-release}"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SIGN_IDENTITY="${SIGN_IDENTITY:-Sulfurcrest Dev}"
 INSTALL_DIR="${INSTALL_DIR:-/Applications}"
