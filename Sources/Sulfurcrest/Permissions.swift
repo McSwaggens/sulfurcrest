@@ -1,4 +1,5 @@
 import AVFoundation
+import AppKit
 import ApplicationServices
 
 /// Thin wrappers around the TCC permissions this app needs:
@@ -26,6 +27,28 @@ enum Permissions {
             return await AVCaptureDevice.requestAccess(for: .audio)
         default:
             return false
+        }
+    }
+
+    /// Current microphone authorization, without prompting — lets the UI tell
+    /// `.notDetermined` (promptable inline) from `.denied` (Settings-only).
+    static var microphoneStatus: AVAuthorizationStatus {
+        AVCaptureDevice.authorizationStatus(for: .audio)
+    }
+
+    /// Opens System Settings straight to the Microphone privacy pane.
+    static func openMicrophoneSettings() {
+        openSettings("Privacy_Microphone")
+    }
+
+    /// Opens System Settings straight to the Accessibility privacy pane.
+    static func openAccessibilitySettings() {
+        openSettings("Privacy_Accessibility")
+    }
+
+    private static func openSettings(_ anchor: String) {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") {
+            NSWorkspace.shared.open(url)
         }
     }
 }

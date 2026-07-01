@@ -19,11 +19,18 @@ final class Settings: ObservableObject {
         didSet { defaults.set(revealDelayMs, forKey: Keys.revealDelayMs) }
     }
 
+    /// Whether the first-run onboarding window has been dismissed via "Get
+    /// Started". Drives whether onboarding auto-appears at launch.
+    @Published var hasCompletedOnboarding: Bool {
+        didSet { defaults.set(hasCompletedOnboarding, forKey: Keys.hasCompletedOnboarding) }
+    }
+
     private let defaults = UserDefaults.standard
 
     private enum Keys {
         static let previewInterval = "previewInterval"
         static let revealDelayMs = "revealDelayMs"
+        static let hasCompletedOnboarding = "hasCompletedOnboarding"
     }
 
     private init() {
@@ -31,5 +38,6 @@ final class Settings: ObservableObject {
             ?? Self.defaultPreviewInterval
         revealDelayMs = defaults.object(forKey: Keys.revealDelayMs) as? Double
             ?? Self.defaultRevealDelayMs
+        hasCompletedOnboarding = defaults.bool(forKey: Keys.hasCompletedOnboarding)
     }
 }
