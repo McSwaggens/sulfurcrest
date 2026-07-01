@@ -29,6 +29,14 @@ final class DictationController {
     private var flashWork: DispatchWorkItem?
     private let holdThreshold: TimeInterval = 0.35
 
+    // MARK: Auto-stop on silence (hands-free sessions only)
+    // Threshold on MicCapture's 0...1 dB-scaled input level; below it counts as
+    // silence. Heuristic — raise if it stops too eagerly, lower if it won't stop
+    // in a quiet room.
+    private static let silenceLevelThreshold: Float = 0.2
+    private var sawSpeech = false
+    private var lastLoudAt: Date?
+
     // MARK: Execution layer (serial)
     private enum Command { case start, stop, cancel }
     private let commands: AsyncStream<Command>
@@ -73,7 +81,8 @@ final class DictationController {
             }
         }
 
-        // Live mic level → HUD meter, with fast attack / slow decay smoothing.
+        // Live mic level → HUD meter (fast attack / slow decay smoothing) and
+        // silence tracker (auto-stop), off a single per-session level stream.
         let (levelStream, levelCont) = AsyncStream<Float>.makeStream()
         levelContinuation = levelCont
         Task { [weak self] in
@@ -81,6 +90,7 @@ final class DictationController {
             for await level in levelStream {
                 smoothed = max(level, smoothed * 0.8)
                 self?.hud.model.inputLevel = smoothed
+                self?.handleLevel(level)
             }
         }
     }
@@ -138,6 +148,8 @@ final class DictationController {
         case .start:
             guard !sessionActive else { return }
             sessionActive = true
+            sawSpeech = false
+            lastLoudAt = nil
             flashWork?.cancel()
             hud.present()
             do {
@@ -167,6 +179,30 @@ final class DictationController {
             mic.stop()
             hud.dismiss()
             await asr.cancelSession()
+        }
+    }
+
+    /// Auto-stop a hands-free session once the mic stays silent long enough.
+    /// Runs on the main actor, once per captured audio buffer, on MicCapture's
+    /// 0...1 dB-scaled input level.
+    private func handleLevel(_ level: Float) {
+        // Only tap-latched hands-free sessions auto-stop; hold-to-talk is
+        // release-to-stop. Gate on the live setting.
+        guard sessionActive, toggledOn, Settings.shared.autoStopEnabled else {
+            sawSpeech = false
+            return
+        }
+        if level >= Self.silenceLevelThreshold {
+            sawSpeech = true
+            lastLoudAt = Date()
+        } else if sawSpeech, let last = lastLoudAt,
+                  Date().timeIntervalSince(last) >= Settings.shared.autoStopSilence {
+            // Mirror commandKeyUp's stop: clear intent flags, then reuse the
+            // existing .stop path so the transcript is pasted.
+            active = false
+            toggledOn = false
+            sawSpeech = false
+            commandContinuation.yield(.stop)
         }
     }
 

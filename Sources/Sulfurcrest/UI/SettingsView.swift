@@ -67,6 +67,25 @@ struct SettingsView: View {
             Section("General") {
                 Toggle("Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, isOn in setLaunchAtLogin(isOn) }
+
+                Toggle("Auto-stop when you stop speaking", isOn: $settings.autoStopEnabled)
+
+                if settings.autoStopEnabled {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Stop after")
+                            Spacer()
+                            Text(String(format: "%.1f s of silence", settings.autoStopSilence))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        Slider(value: $settings.autoStopSilence, in: 0.5...5.0, step: 0.5)
+                        Text("Only for hands-free (tap-to-start) dictation. Holding right-⌘ "
+                            + "still stops when you release the key.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .formStyle(.grouped)

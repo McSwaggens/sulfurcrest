@@ -7,6 +7,8 @@ final class Settings: ObservableObject {
 
     static let defaultPreviewInterval = 0.22
     static let defaultRevealDelayMs = 60.0
+    static let defaultAutoStopEnabled = false        // off by default
+    static let defaultAutoStopSilence = 2.0          // seconds
 
     /// Seconds of new audio between live-preview re-transcriptions. Smaller =
     /// words appear sooner (more real-time) at the cost of more CPU.
@@ -32,6 +34,16 @@ final class Settings: ObservableObject {
         didSet { defaults.set(inputDeviceUID, forKey: Keys.inputDeviceUID) }
     }
 
+    /// Finish a hands-free (tap-to-start) session automatically after silence.
+    @Published var autoStopEnabled: Bool {
+        didSet { defaults.set(autoStopEnabled, forKey: Keys.autoStopEnabled) }
+    }
+
+    /// Seconds of continuous silence before a hands-free session auto-finishes.
+    @Published var autoStopSilence: Double {
+        didSet { defaults.set(autoStopSilence, forKey: Keys.autoStopSilence) }
+    }
+
     private let defaults = UserDefaults.standard
 
     private enum Keys {
@@ -39,6 +51,8 @@ final class Settings: ObservableObject {
         static let revealDelayMs = "revealDelayMs"
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
         static let inputDeviceUID = "inputDeviceUID"
+        static let autoStopEnabled = "autoStopEnabled"
+        static let autoStopSilence = "autoStopSilence"
     }
 
     private init() {
@@ -48,5 +62,9 @@ final class Settings: ObservableObject {
             ?? Self.defaultRevealDelayMs
         hasCompletedOnboarding = defaults.bool(forKey: Keys.hasCompletedOnboarding)
         inputDeviceUID = defaults.string(forKey: Keys.inputDeviceUID)
+        autoStopEnabled = defaults.object(forKey: Keys.autoStopEnabled) as? Bool
+            ?? Self.defaultAutoStopEnabled
+        autoStopSilence = defaults.object(forKey: Keys.autoStopSilence) as? Double
+            ?? Self.defaultAutoStopSilence
     }
 }
