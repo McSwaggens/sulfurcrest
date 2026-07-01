@@ -26,8 +26,10 @@ INSTALL_DIR="${INSTALL_DIR:-/Applications}"
 
 cd "$PROJECT_DIR"
 
-echo "==> swift build -c $BUILD_CONFIG"
-swift build -c "$BUILD_CONFIG"
+# Build only the app executable — the dependency's CLI/benchmark targets aren't
+# part of the bundle and needn't (and sometimes won't) compile.
+echo "==> swift build -c $BUILD_CONFIG --product $APP_NAME"
+swift build -c "$BUILD_CONFIG" --product "$APP_NAME"
 BIN_DIR="$(swift build -c "$BUILD_CONFIG" --show-bin-path)"
 BIN_PATH="$BIN_DIR/$APP_NAME"
 

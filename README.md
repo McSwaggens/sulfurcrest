@@ -1,7 +1,8 @@
 # Sulfurcrest
 
-A native macOS voice-to-text dictation agent. Hold (or tap) the **right Command**
-key, speak, and the transcription is pasted into whatever app you're using.
+A native macOS voice-to-text dictation agent. Hold (or tap) your hotkey (the
+**right Command** key by default), speak, and the transcription is pasted into
+whatever app you're using.
 
 Transcription runs **fully on-device** with NVIDIA **Parakeet** (via
 [FluidAudio](https://github.com/FluidInference/FluidAudio)), compiled to Core ML and
@@ -10,8 +11,10 @@ and GPU free.
 
 ## Features
 
-- **Two ways to talk** — *hold* right ⌘ (push-to-talk) or *tap* it to start and tap
+- **Two ways to talk** — *hold* the hotkey (push-to-talk) or *tap* it to start and tap
   again to stop (toggle).
+- **Configurable hotkey** — record any key combo (e.g. ⌃⌥Space) or a single modifier;
+  regular-key combos are captured system-wide and won't type into other apps.
 - **Live glass window** — a small, centered, translucent panel shows the transcription
   as you speak, with words fading in one at a time, and grows to fit.
 - **Paste anywhere** — inserts into the focused app (native, Electron, terminals, web
@@ -19,7 +22,7 @@ and GPU free.
 - **Escape to cancel** — abandon a take with no paste.
 - **On-device & private** — no network after the one-time model download.
 - **Menu-bar agent** — no Dock icon; optional launch at login.
-- **Settings** — live update rate, word-reveal speed, launch at login.
+- **Settings** — configurable hotkey, live update rate, word-reveal speed, launch at login.
 
 ## Requirements
 
@@ -42,14 +45,17 @@ later launches load it from cache.
 On first run, grant in **System Settings → Privacy & Security**:
 
 - **Microphone** — to record speech.
-- **Accessibility** — for the global hotkey and to paste (a synthesized ⌘V). The
-  hotkey appears to work before this is granted, but pasting won't — grant both.
+- **Accessibility** — for the global hotkey (a `CGEventTap`) and to paste (a
+  synthesized ⌘V). The hotkey starts working as soon as this is granted (the monitor
+  retries until then) — no relaunch needed.
 
 ## Usage
 
-- **Push-to-talk:** hold right ⌘, speak, release.
-- **Toggle:** tap right ⌘ to start, tap again to stop.
+- **Push-to-talk:** hold the hotkey (right ⌘ by default), speak, release.
+- **Toggle:** tap the hotkey to start, tap again to stop.
 - **Cancel:** press **Esc** while recording — the window closes and nothing is pasted.
+- **Change the hotkey:** open Settings → *Hotkey* → **Record shortcut**, then press the
+  key combo you want. It takes effect immediately.
 - If nothing was said, nothing is pasted.
 - **Settings / Quit:** click the menu-bar mic icon → **Settings…** (⌘,).
 
@@ -68,7 +74,8 @@ The default model is English (`parakeet-tdt-0.6b-v2`). For multilingual, set
   **Code Signing** certificate named `Sulfurcrest Dev` (Keychain Access → Certificate
   Assistant → Create a Certificate → *Self Signed Root*, *Code Signing*); `build.sh`
   detects it automatically. Override with `SIGN_IDENTITY=...`.
-- Architecture: a global right-⌘ monitor (`Hotkey/RightCommandWatcher.swift`) feeds a
+- Architecture: a global `CGEventTap` hotkey monitor (`Hotkey/HotkeyMonitor.swift`,
+  configured by `Hotkey/Hotkey.swift`) feeds a
   serial state machine (`Hotkey/DictationController.swift`) that drives mic capture
   (`Audio/`), the resident on-device Parakeet engine (`ASR/ASRService.swift`), the glass
   HUD (`UI/`), and paste (`Paste/Paster.swift`).

@@ -44,6 +44,14 @@ final class Settings: ObservableObject {
         didSet { defaults.set(autoStopSilence, forKey: Keys.autoStopSilence) }
     }
 
+    /// The key (or key-combo) that triggers dictation. See `Hotkey`.
+    @Published var hotkey: Hotkey {
+        didSet {
+            defaults.set(Int(hotkey.keyCode), forKey: Keys.hotkeyKeyCode)
+            defaults.set(Int(hotkey.modifiersRaw), forKey: Keys.hotkeyModifiers)
+        }
+    }
+
     private let defaults = UserDefaults.standard
 
     private enum Keys {
@@ -53,6 +61,8 @@ final class Settings: ObservableObject {
         static let inputDeviceUID = "inputDeviceUID"
         static let autoStopEnabled = "autoStopEnabled"
         static let autoStopSilence = "autoStopSilence"
+        static let hotkeyKeyCode = "hotkeyKeyCode"
+        static let hotkeyModifiers = "hotkeyModifiers"
     }
 
     private init() {
@@ -66,5 +76,11 @@ final class Settings: ObservableObject {
             ?? Self.defaultAutoStopEnabled
         autoStopSilence = defaults.object(forKey: Keys.autoStopSilence) as? Double
             ?? Self.defaultAutoStopSilence
+        if let code = defaults.object(forKey: Keys.hotkeyKeyCode) as? Int {
+            let mods = defaults.object(forKey: Keys.hotkeyModifiers) as? Int ?? 0
+            hotkey = Hotkey(keyCode: UInt16(code), modifiersRaw: UInt(mods))
+        } else {
+            hotkey = .default
+        }
     }
 }

@@ -1,8 +1,10 @@
+import AppKit
 import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject private var settings = Settings.shared
+    @StateObject private var recorder = HotkeyRecorder()
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var inputDevices = AudioDevices.inputs()
 
@@ -11,6 +13,35 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("Hotkey") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Dictation trigger")
+                        Spacer()
+                        Text(settings.hotkey.displayString)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    HStack {
+                        Button(recorder.isRecording ? "Press keys… (Esc to cancel)" : "Record shortcut") {
+                            if recorder.isRecording {
+                                recorder.cancel()
+                            } else {
+                                recorder.begin { settings.hotkey = $0 }
+                            }
+                        }
+                        Button("Reset to Right ⌘") { settings.hotkey = .default }
+                            .disabled(settings.hotkey == .default)
+                    }
+                    Text("Hold to talk, or tap to toggle. A single modifier (like "
+                        + "Right ⌘) triggers on press and release; a key combo "
+                        + "(like ⌃⌥Space) is captured system-wide and won't type "
+                        + "into other apps. Escape always cancels.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section("Microphone") {
                 Picker("Input device", selection: Binding(
                     get: { settings.inputDeviceUID ?? Self.systemDefaultTag },
@@ -80,8 +111,8 @@ struct SettingsView: View {
                                 .monospacedDigit()
                         }
                         Slider(value: $settings.autoStopSilence, in: 0.5...5.0, step: 0.5)
-                        Text("Only for hands-free (tap-to-start) dictation. Holding right-⌘ "
-                            + "still stops when you release the key.")
+                        Text("Only for hands-free (tap-to-start) dictation. Holding the "
+                            + "hotkey still stops when you release it.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -92,6 +123,7 @@ struct SettingsView: View {
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
         .onAppear { inputDevices = AudioDevices.inputs() }
+        .onDisappear { recorder.cancel() }   // don't leave the live tap gated if closed mid-record
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
@@ -105,5 +137,72 @@ struct SettingsView: View {
             NSLog("Sulfurcrest: launch-at-login toggle failed: \(error)")
         }
         launchAtLogin = SMAppService.mainApp.status == .enabled
+    }
+}
+
+/// Captures the next key combo the user presses, for the Settings "Record
+/// shortcut" button.
+///
+/// Uses a local `NSEvent` monitor (returning nil to swallow) rather than a
+/// first-responder view: local monitors run before menu key-equivalents, so
+/// recording a ⌘-combo won't fire a menu item or beep. While recording, the live
+/// `HotkeyMonitor` tap is gated so capturing a key doesn't also start dictation.
+@MainActor
+final class HotkeyRecorder: ObservableObject {
+    @Published private(set) var isRecording = false
+
+    private var monitor: Any?
+    private var onCommit: ((Hotkey) -> Void)?
+    /// Keycode of a modifier pressed with no regular key yet — becomes a
+    /// modifier-only hotkey if released alone.
+    private var pendingModifier: UInt16?
+
+    func begin(onCommit: @escaping (Hotkey) -> Void) {
+        guard !isRecording else { return }
+        isRecording = true
+        pendingModifier = nil
+        self.onCommit = onCommit
+        HotkeyMonitor.shared.setRecording(true)
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+            self?.consume(event)
+            return nil   // swallow so the keystroke can't leak into the form
+        }
+    }
+
+    func cancel() { stop() }
+
+    private func consume(_ event: NSEvent) {
+        switch event.type {
+        case .keyDown:
+            if event.keyCode == 53 { cancel(); return }   // Escape is reserved for cancel
+            let mods = event.modifierFlags.intersection(Hotkey.relevantModifiers)
+            guard !mods.isEmpty else { return }           // reject a bare key (would hijack typing)
+            commit(Hotkey(keyCode: event.keyCode, modifiersRaw: mods.rawValue))
+
+        case .flagsChanged:
+            let mods = event.modifierFlags.intersection(Hotkey.relevantModifiers)
+            if Hotkey.modifierKeyCodes.contains(event.keyCode), !mods.isEmpty, pendingModifier == nil {
+                pendingModifier = event.keyCode                       // a modifier went down
+            } else if let down = pendingModifier, mods.isEmpty {
+                commit(Hotkey(keyCode: down, modifiersRaw: 0))        // all released → modifier-only
+            }
+
+        default:
+            break
+        }
+    }
+
+    private func commit(_ hotkey: Hotkey) {
+        onCommit?(hotkey)
+        stop()
+    }
+
+    private func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        onCommit = nil
+        pendingModifier = nil
+        isRecording = false
+        HotkeyMonitor.shared.setRecording(false)
     }
 }

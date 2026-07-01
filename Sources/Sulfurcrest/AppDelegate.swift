@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @MainActor
@@ -9,14 +10,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusTitleItem = NSMenuItem(title: "Sulfurcrest", action: nil, keyEquivalent: "")
     private var settingsWindow: NSWindow?
     private var onboardingWindow: NSWindow?
+    private var statusText: String?
+    private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusItem()
 
-        // Global right-Command hotkey + dictation state machine. The monitor
-        // observes a modifier and works without Accessibility; only paste
-        // (synthetic ⌘V) needs it.
+        // Global hotkey + dictation state machine. The CGEventTap needs
+        // Accessibility; it retries until granted (see HotkeyMonitor), so a grant
+        // via onboarding takes effect without a relaunch.
         dictation.start()
+
+        // Keep the menu's "Ready (hold …)" hint in sync with the chosen hotkey.
+        Settings.shared.$hotkey
+            .dropFirst()
+            .sink { [weak self] _ in
+                Task { @MainActor in self?.setStatus(self?.statusText) }
+            }
+            .store(in: &cancellables)
 
         // Onboarding drives the permission prompts (with context) instead of
         // firing them unexplained at launch. Show it on first run, or whenever
@@ -82,7 +93,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setStatus(_ title: String?) {
-        statusTitleItem.title = title ?? "Sulfurcrest — Ready (hold right ⌘)"
+        statusText = title
+        statusTitleItem.title = title
+            ?? "Sulfurcrest — Ready (hold \(Settings.shared.hotkey.displayString))"
     }
 
     // MARK: - Onboarding window

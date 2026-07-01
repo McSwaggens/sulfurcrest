@@ -1,7 +1,8 @@
 import AppKit
+import Combine
 import Foundation
 
-/// Drives dictation from the right-Command key and Escape.
+/// Drives dictation from the configured hotkey and Escape.
 ///
 /// Two clearly separated layers keep fast key presses from ever racing or wedging
 /// the UI:
@@ -18,7 +19,8 @@ final class DictationController {
     private let hud = GlassHUDPanel()
     private let mic = MicCapture()
     private let asr = ASRService.shared
-    private let watcher = RightCommandWatcher()
+    private let monitor = HotkeyMonitor.shared
+    private var cancellables = Set<AnyCancellable>()
 
     // MARK: Intent layer (synchronous)
     private var physicalDown = false
@@ -56,17 +58,26 @@ final class DictationController {
         isModelReady = ready
     }
 
-    /// Installs the hotkey monitors and starts the consumers. Call once.
+    /// Installs the hotkey monitor and starts the consumers. Call once.
     func start() {
         guard !started else { return }
         started = true
-        watcher.start()
+
+        let monitor = self.monitor
+        monitor.updateHotkey(Settings.shared.hotkey)
+        monitor.start()
 
         // Key events → intent state machine.
-        let events = watcher.events
+        let events = monitor.events
         Task { [weak self] in
             for await event in events { self?.handle(event) }
         }
+
+        // Apply hotkey changes from Settings live (no restart). Capture the
+        // Sendable monitor rather than self to stay clear of main-actor capture.
+        Settings.shared.$hotkey
+            .sink { hk in monitor.updateHotkey(hk) }
+            .store(in: &cancellables)
 
         // Serial command processor: one command fully handled before the next.
         let commands = self.commands
@@ -97,17 +108,17 @@ final class DictationController {
 
     // MARK: - Intent layer (synchronous, instant)
 
-    private func handle(_ event: RightCommandWatcher.Event) {
+    private func handle(_ event: HotkeyMonitor.Event) {
         switch event {
-        case .rightCommand(let down):
-            down ? commandKeyDown() : commandKeyUp()
+        case .hotkey(let down):
+            down ? hotkeyDown() : hotkeyUp()
         case .escape:
             escape()
         }
     }
 
-    private func commandKeyDown() {
-        guard !physicalDown else { return }   // dedup repeated flagsChanged
+    private func hotkeyDown() {
+        guard !physicalDown else { return }   // dedup repeated down events
         physicalDown = true
         downAt = Date()
         guard isModelReady else {
@@ -120,7 +131,7 @@ final class DictationController {
         }
     }
 
-    private func commandKeyUp() {
+    private func hotkeyUp() {
         guard physicalDown else { return }
         physicalDown = false
         guard active else { return }
@@ -197,7 +208,7 @@ final class DictationController {
             lastLoudAt = Date()
         } else if sawSpeech, let last = lastLoudAt,
                   Date().timeIntervalSince(last) >= Settings.shared.autoStopSilence {
-            // Mirror commandKeyUp's stop: clear intent flags, then reuse the
+            // Mirror hotkeyUp's stop: clear intent flags, then reuse the
             // existing .stop path so the transcript is pasted.
             active = false
             toggledOn = false
