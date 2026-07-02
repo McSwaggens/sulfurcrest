@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import SwiftUI
 
 /// A small, centered, click-through glass panel that floats above all apps and
@@ -83,7 +84,7 @@ final class GlassHUDPanel: NSPanel {
     func present() {
         model.reset()
         model.isListening = true
-        center()
+        centerOnFocusedScreen()
         orderFrontRegardless()
     }
 
@@ -92,8 +93,67 @@ final class GlassHUDPanel: NSPanel {
         model.reset()
         model.isListening = false
         model.statusMessage = message
-        center()
+        centerOnFocusedScreen()
         orderFrontRegardless()
+    }
+
+    /// Center the panel on the display that holds the currently focused window,
+    /// so the HUD appears where the user is actually working on a multi-display
+    /// setup. `.canJoinAllSpaces` already keeps it on the active Space; this only
+    /// picks the right screen. Falls back to the screen under the cursor, then
+    /// the main screen.
+    private func centerOnFocusedScreen() {
+        let screen = focusedScreen() ?? NSScreen.main
+        guard let screen else { center(); return }
+        let visible = screen.visibleFrame
+        var f = frame
+        f.origin.x = visible.midX - f.width / 2
+        f.origin.y = visible.midY - f.height / 2
+        setFrame(f, display: true)
+    }
+
+    /// The screen containing the focused window of the frontmost app (via the
+    /// Accessibility API), or the screen under the mouse cursor.
+    private func focusedScreen() -> NSScreen? {
+        if let center = focusedWindowCenter(),
+           let match = NSScreen.screens.first(where: { $0.frame.contains(center) }) {
+            return match
+        }
+        let mouse = NSEvent.mouseLocation
+        return NSScreen.screens.first { $0.frame.contains(mouse) }
+    }
+
+    /// Center point of the frontmost app's focused window in Cocoa (bottom-left
+    /// origin) global coordinates, or nil if it can't be determined.
+    private func focusedWindowCenter() -> NSPoint? {
+        guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        else { return nil }
+        let app = AXUIElementCreateApplication(pid)
+
+        var windowRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &windowRef) == .success,
+              let window = windowRef, CFGetTypeID(window) == AXUIElementGetTypeID()
+        else { return nil }
+        let axWindow = window as! AXUIElement
+
+        var posRef: CFTypeRef?
+        var sizeRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axWindow, kAXPositionAttribute as CFString, &posRef) == .success,
+              AXUIElementCopyAttributeValue(axWindow, kAXSizeAttribute as CFString, &sizeRef) == .success
+        else { return nil }
+
+        var pos = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(posRef as! AXValue, .cgPoint, &pos),
+              AXValueGetValue(sizeRef as! AXValue, .cgSize, &size)
+        else { return nil }
+
+        // AX coordinates are top-left origin (y grows down), relative to the top
+        // of the primary display. Convert the window center to Cocoa's
+        // bottom-left global space to match against NSScreen frames.
+        guard let primary = NSScreen.screens.first else { return nil }
+        let axCenter = CGPoint(x: pos.x + size.width / 2, y: pos.y + size.height / 2)
+        return NSPoint(x: axCenter.x, y: primary.frame.maxY - axCenter.y)
     }
 
     func dismiss() {
