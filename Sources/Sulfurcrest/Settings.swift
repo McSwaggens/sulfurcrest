@@ -9,6 +9,7 @@ final class Settings: ObservableObject {
     static let defaultRevealDelayMs = 60.0
     static let defaultAutoStopEnabled = false        // off by default
     static let defaultAutoStopSilence = 2.0          // seconds
+    static let defaultPauseMediaOnStart = false      // off by default
 
     /// Seconds of new audio between live-preview re-transcriptions. Smaller =
     /// words appear sooner (more real-time) at the cost of more CPU.
@@ -44,6 +45,12 @@ final class Settings: ObservableObject {
         didSet { defaults.set(autoStopSilence, forKey: Keys.autoStopSilence) }
     }
 
+    /// Pause whatever's playing when dictation starts and resume it when the
+    /// session ends. Off by default.
+    @Published var pauseMediaOnStart: Bool {
+        didSet { defaults.set(pauseMediaOnStart, forKey: Keys.pauseMediaOnStart) }
+    }
+
     /// The key (or key-combo) that triggers dictation. See `Hotkey`.
     @Published var hotkey: Hotkey {
         didSet {
@@ -61,6 +68,7 @@ final class Settings: ObservableObject {
         static let inputDeviceUID = "inputDeviceUID"
         static let autoStopEnabled = "autoStopEnabled"
         static let autoStopSilence = "autoStopSilence"
+        static let pauseMediaOnStart = "pauseMediaOnStart"
         static let hotkeyKeyCode = "hotkeyKeyCode"
         static let hotkeyModifiers = "hotkeyModifiers"
     }
@@ -76,6 +84,8 @@ final class Settings: ObservableObject {
             ?? Self.defaultAutoStopEnabled
         autoStopSilence = defaults.object(forKey: Keys.autoStopSilence) as? Double
             ?? Self.defaultAutoStopSilence
+        pauseMediaOnStart = defaults.object(forKey: Keys.pauseMediaOnStart) as? Bool
+            ?? Self.defaultPauseMediaOnStart
         if let code = defaults.object(forKey: Keys.hotkeyKeyCode) as? Int {
             let mods = defaults.object(forKey: Keys.hotkeyModifiers) as? Int ?? 0
             hotkey = Hotkey(keyCode: UInt16(code), modifiersRaw: UInt(mods))

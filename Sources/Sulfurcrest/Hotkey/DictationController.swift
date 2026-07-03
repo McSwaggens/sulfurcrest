@@ -44,6 +44,8 @@ final class DictationController {
     private let commands: AsyncStream<Command>
     private let commandContinuation: AsyncStream<Command>.Continuation
     private var sessionActive = false
+    /// Whether we toggled media to pause on start (so we toggle back on end).
+    private var pausedMedia = false
 
     // Live mic input level → HUD meter.
     private var levelContinuation: AsyncStream<Float>.Continuation?
@@ -162,6 +164,14 @@ final class DictationController {
             sawSpeech = false
             lastLoudAt = nil
             flashWork?.cancel()
+            // Only toggle when audio is actually playing — a blind toggle would
+            // start paused media (macOS gives no way to read play state).
+            if Settings.shared.pauseMediaOnStart, MediaController.isOutputActive() {
+                MediaController.togglePlayPause()   // pause
+                pausedMedia = true
+            } else {
+                pausedMedia = false
+            }
             hud.present()
             do {
                 let continuation = try await asr.beginSession(
@@ -171,6 +181,7 @@ final class DictationController {
                     level: levelContinuation!)
             } catch {
                 sessionActive = false
+                resumeMediaIfNeeded()   // session never really started → undo the pause
                 await asr.cancelSession()
                 flash("Microphone unavailable")
                 NSLog("Sulfurcrest: failed to start dictation: \(error)")
@@ -181,6 +192,7 @@ final class DictationController {
             sessionActive = false
             mic.stop()
             hud.dismiss()
+            resumeMediaIfNeeded()
             let text = (try? await asr.endSession()) ?? ""
             if !text.isEmpty { Paster.paste(text) }   // nothing transcribed → do nothing
 
@@ -189,8 +201,16 @@ final class DictationController {
             sessionActive = false
             mic.stop()
             hud.dismiss()
+            resumeMediaIfNeeded()
             await asr.cancelSession()
         }
+    }
+
+    /// Resume media if we paused it for this session (toggle back).
+    private func resumeMediaIfNeeded() {
+        guard pausedMedia else { return }
+        pausedMedia = false
+        MediaController.togglePlayPause()   // resume
     }
 
     /// Auto-stop a hands-free session once the mic stays silent long enough.

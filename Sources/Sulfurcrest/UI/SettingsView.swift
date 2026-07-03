@@ -117,6 +117,12 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                Toggle("Pause media while dictating", isOn: $settings.pauseMediaOnStart)
+                Text("Pauses whatever's playing when a dictation session starts, so it "
+                    + "won't bleed into the recording, and resumes it when you finish.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
